@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ──────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  COMMUNITY_LEADER
+  ADMIN
+}
+
+enum UserStatus {
+  active
+  blocked
+  deleted
+}
+
+enum Gender {
+  male
+  female
+  non_binary
+  na
+}
+
+enum ActivityType {
+  trekking
+  theater
+  dance
+  fitness
+  outdoor
+  wellness
+  gastronomy
+  music
+  art
+  sports
+  other
+}
+
+enum EnrollmentStatus {
+  pending
+  confirmed
+  attended
+  cancelled
+}
+
+enum SwipeAction {
+  LIKE
+  PASS
+}
+
+// ─── USERS ──────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  phone        String?    @unique
+  username     String?    @unique
+  role         UserRole   @default(USER)
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  profile       UserProfile?
+  interests     UserInterest[]
+  activities    Activity[]           @relation("activity_creator")
+  enrollments   ActivityEnrollment[]
+  swipesGiven   SwipeEvent[]         @relation("swipes_given")
+  swipesReceived SwipeEvent[]        @relation("swipes_received")
+  matchesAsA    Match[]              @relation("match_user_a")
+  matchesAsB    Match[]              @relation("match_user_b")
+}
+
+model UserProfile {
+  userId    String    @id
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName String?
+  lastName  String?
+  birthdate DateTime?
+  gender    Gender?
+  bio       String?
+  avatarUrl String?
+  city      String?
+  latitude  Float?
+  longitude Float?
+}
+
+// ─── INTERESTS ──────────────────────────────────────────
+
+model Interest {
+  id    String @id @default(uuid())
+  name  String @unique
+  slug  String @unique
+
+  users      UserInterest[]
+  activities ActivityInterest[]
+}
+
+model UserInterest {
+  userId     String
+  interestId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@id([userId, interestId])
+}
+
+// ─── ACTIVITIES & SESSIONS ──────────────────────────────
+
+model Activity {
+  id          String       @id @default(uuid())
+  slug        String       @unique
+  title       String
+  type        ActivityType
+  description String?
+  isActive    Boolean      @default(true)
+  createdById String
+  createdBy   User         @relation("activity_creator", fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  sessions  ActivitySession[]
+  interests ActivityInterest[]
+}
+
+model ActivityInterest {
+  activityId String
+  interestId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, interestId])
+}
+
+model ActivitySession {
+  id           String   @id @default(uuid())
+  activityId   String
+  activity     Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  startsAt     DateTime
+  endsAt       DateTime
+  capacity     Int?
+  priceCents   Int?
+  locationName String?
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  enrollments ActivityEnrollment[]
+  swipes      SwipeEvent[]
+  matches     Match[]
+}
+
+model ActivityEnrollment {
+  id        String           @id @default(uuid())
+  sessionId String
+  session   ActivitySession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    EnrollmentStatus @default(pending)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([sessionId, userId])
+}
+
+// ─── SOCIAL: SWIPES & MATCHES ───────────────────────────
+
+model SwipeEvent {
+  id        String          @id @default(uuid())
+  byUserId  String
+  toUserId  String
+  sessionId String
+  action    SwipeAction
+  byUser    User            @relation("swipes_given", fields: [byUserId], references: [id])
+  toUser    User            @relation("swipes_received", fields: [toUserId], references: [id])
+  session   ActivitySession @relation(fields: [sessionId], references: [id])
+  createdAt DateTime        @default(now())
+
+  @@unique([byUserId, toUserId, sessionId])
+  @@index([toUserId, sessionId])
+  @@index([byUserId, sessionId])
+}
+
+model Match {
+  id        String          @id @default(uuid())
+  userAId   String
+  userBId   String
+  sessionId String
+  userA     User            @relation("match_user_a", fields: [userAId], references: [id])
+  userB     User            @relation("match_user_b", fields: [userBId], references: [id])
+  session   ActivitySession @relation(fields: [sessionId], references: [id])
+  createdAt DateTime        @default(now())
+
+  @@unique([userAId, userBId, sessionId])
+  @@index([userAId])
+  @@index([userBId])
+}

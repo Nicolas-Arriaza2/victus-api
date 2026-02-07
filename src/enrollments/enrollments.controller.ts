@@ -1,0 +1,40 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { EnrollmentsService } from './enrollments.service';
+import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
+import { JwtGuard } from '../auth/guards/jwt.guard';
+
+@Controller('enrollments')
+@UseGuards(JwtGuard)
+export class EnrollmentsController {
+  constructor(private readonly service: EnrollmentsService) {}
+
+  @Post()
+  enroll(@Req() req: any, @Body() dto: CreateEnrollmentDto) {
+    return this.service.enroll(req.user.sub, dto.sessionId);
+  }
+
+  @Patch(':id/cancel')
+  cancel(@Req() req: any, @Param('id') id: string) {
+    return this.service.cancel(req.user.sub, id);
+  }
+
+  @Get('mine')
+  getMyEnrollments(@Req() req: any) {
+    return this.service.getMyEnrollments(req.user.sub);
+  }
+
+  @Get()
+  getSessionEnrollments(@Query('sessionId') sessionId: string) {
+    return this.service.getSessionEnrollments(sessionId);
+  }
+}

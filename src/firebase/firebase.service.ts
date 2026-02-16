@@ -13,32 +13,40 @@ export class FirebaseService implements OnModuleInit {
   constructor(private config: ConfigService) {}
 
   onModuleInit() {
-    const credJson = this.config.get<string>('FIREBASE_CREDENTIALS_JSON');
-    let serviceAccount: any;
+    try {
+      const credJson = this.config.get<string>('FIREBASE_CREDENTIALS_JSON');
+      let serviceAccount: any;
 
-    if (credJson) {
-      serviceAccount = JSON.parse(credJson);
-      this.logger.log('Firebase credentials loaded from env var');
-    } else {
-      const credPath = this.config.getOrThrow<string>(
-        'FIREBASE_CREDENTIALS_PATH',
-      );
-      const absolutePath = resolve(process.cwd(), credPath);
-      serviceAccount = JSON.parse(readFileSync(absolutePath, 'utf-8'));
-      this.logger.log('Firebase credentials loaded from file');
+      if (credJson) {
+        serviceAccount = JSON.parse(credJson);
+        this.logger.log('Firebase credentials loaded from env var');
+      } else {
+        const credPath = this.config.get<string>('FIREBASE_CREDENTIALS_PATH');
+        if (!credPath) {
+          this.logger.warn(
+            'No Firebase credentials configured (FIREBASE_CREDENTIALS_JSON or FIREBASE_CREDENTIALS_PATH). Firebase disabled.',
+          );
+          return;
+        }
+        const absolutePath = resolve(process.cwd(), credPath);
+        serviceAccount = JSON.parse(readFileSync(absolutePath, 'utf-8'));
+        this.logger.log('Firebase credentials loaded from file');
+      }
+
+      const bucketUrl = this.config
+        .getOrThrow<string>('FIREBASE_STORAGE_BUCKET')
+        .replace(/^gs:\/\//, '');
+
+      this.app = admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        storageBucket: bucketUrl,
+      });
+
+      this.bucket = this.app.storage().bucket();
+      this.logger.log(`Firebase initialized — bucket: ${bucketUrl}`);
+    } catch (err) {
+      this.logger.error('Failed to initialize Firebase', err.message);
     }
-
-    const bucketUrl = this.config
-      .getOrThrow<string>('FIREBASE_STORAGE_BUCKET')
-      .replace(/^gs:\/\//, '');
-
-    this.app = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      storageBucket: bucketUrl,
-    });
-
-    this.bucket = this.app.storage().bucket();
-    this.logger.log(`Firebase initialized — bucket: ${bucketUrl}`);
   }
 
   getApp() {

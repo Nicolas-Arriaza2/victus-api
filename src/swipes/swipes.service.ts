@@ -5,14 +5,30 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSwipeDto } from './dto/create-swipe.dto';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class SwipesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private subscriptions: SubscriptionsService,
+  ) {}
 
   async swipe(byUserId: string, dto: CreateSwipeDto) {
     if (byUserId === dto.toUserId)
       throw new BadRequestException('Cannot swipe yourself');
+
+    // Check subscription access for monthly activities
+    const session = await this.prisma.activitySession.findUnique({
+      where: { id: dto.sessionId },
+      include: { activity: true },
+    });
+    if (session?.activity.pricingModel === 'monthly_subscription') {
+      await this.subscriptions.verifyActiveSubscription(
+        byUserId,
+        session.activityId,
+      );
+    }
 
     // Verify both users are enrolled in the session
     const enrollments = await this.prisma.activityEnrollment.findMany({

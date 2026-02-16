@@ -1,19 +1,27 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class EnrollmentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private subscriptions: SubscriptionsService,
+  ) {}
 
   async enroll(userId: string, sessionId: string) {
     const session = await this.prisma.activitySession.findUnique({
       where: { id: sessionId },
-      include: { _count: { select: { enrollments: true } } },
+      include: {
+        activity: true,
+        _count: { select: { enrollments: true } },
+      },
     });
     if (!session) throw new NotFoundException('Session not found');
 
@@ -26,8 +34,32 @@ export class EnrollmentsService {
     });
     if (existing) throw new ConflictException('Already enrolled');
 
+    // Monthly subscription activities: verify active subscription
+    if (session.activity.pricingModel === 'monthly_subscription') {
+      await this.subscriptions.verifyActiveSubscription(
+        userId,
+        session.activityId,
+      );
+      return this.prisma.activityEnrollment.create({
+        data: {
+          sessionId,
+          userId,
+          status: 'confirmed',
+          paymentStatus: 'free', // paid via subscription
+        },
+        include: { session: { include: { activity: true } } },
+      });
+    }
+
+    const isPaid = session.priceCents && session.priceCents > 0;
+
     return this.prisma.activityEnrollment.create({
-      data: { sessionId, userId, status: 'confirmed' },
+      data: {
+        sessionId,
+        userId,
+        status: isPaid ? 'pending' : 'confirmed',
+        paymentStatus: isPaid ? 'pending_payment' : 'free',
+      },
       include: { session: { include: { activity: true } } },
     });
   }
@@ -64,6 +96,36 @@ export class EnrollmentsService {
             username: true,
             profile: {
               select: { firstName: true, lastName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async updateStatusByLeader(
+    enrollmentId: string,
+    leaderId: string,
+    status: 'confirmed' | 'attended',
+  ) {
+    const enrollment = await this.prisma.activityEnrollment.findUnique({
+      where: { id: enrollmentId },
+      include: { session: { include: { activity: true } } },
+    });
+    if (!enrollment) throw new NotFoundException('Enrollment not found');
+    if (enrollment.session.activity.createdById !== leaderId)
+      throw new ForbiddenException('Not your activity');
+
+    return this.prisma.activityEnrollment.update({
+      where: { id: enrollmentId },
+      data: { status },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            profile: {
+              select: { firstName: true, lastName: true },
             },
           },
         },

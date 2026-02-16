@@ -30,7 +30,7 @@ export class AuthService {
         passwordHash,
         phone: dto.phone,
         username: dto.username,
-        role: dto.role ?? 'USER',
+        roles: dto.role ? (dto.role === 'USER' ? ['USER'] : ['USER', dto.role]) : ['USER'],
         profile: {
           create: {
             firstName: dto.firstName,
@@ -41,7 +41,7 @@ export class AuthService {
       include: { profile: true },
     });
 
-    const token = await this.signToken(user.id, user.email, user.role);
+    const token = await this.signToken(user.id, user.email, user.roles);
     return { user: this.sanitize(user), access_token: token };
   }
 
@@ -55,12 +55,12 @@ export class AuthService {
     const valid = await argon2.verify(user.passwordHash, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    const token = await this.signToken(user.id, user.email, user.role);
+    const token = await this.signToken(user.id, user.email, user.roles);
     return { user: this.sanitize(user), access_token: token };
   }
 
-  private signToken(userId: string, email: string, role: string) {
-    return this.jwt.signAsync({ sub: userId, email, role });
+  private signToken(userId: string, email: string, roles: string[]) {
+    return this.jwt.signAsync({ sub: userId, email, roles });
   }
 
   private sanitize(user: any) {

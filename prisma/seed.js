@@ -4,6 +4,10 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Clean existing data
+  await prisma.leaderBankInfo.deleteMany();
+  await prisma.userPhoto.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.payment.deleteMany();
   await prisma.match.deleteMany();
   await prisma.swipeEvent.deleteMany();
   await prisma.activityEnrollment.deleteMany();
@@ -37,7 +41,7 @@ async function main() {
       email: 'ana@biktus.local',
       passwordHash: password,
       username: 'ana',
-      role: 'USER',
+      roles: ['USER'],
       profile: {
         create: {
           firstName: 'Ana',
@@ -64,7 +68,7 @@ async function main() {
       email: 'bruno@biktus.local',
       passwordHash: password,
       username: 'bruno',
-      role: 'USER',
+      roles: ['USER'],
       profile: {
         create: {
           firstName: 'Bruno',
@@ -91,7 +95,7 @@ async function main() {
       email: 'carla@biktus.local',
       passwordHash: password,
       username: 'carla_leader',
-      role: 'COMMUNITY_LEADER',
+      roles: ['USER', 'COMMUNITY_LEADER'],
       profile: {
         create: {
           firstName: 'Carla',
@@ -111,7 +115,7 @@ async function main() {
       email: 'admin@biktus.local',
       passwordHash: password,
       username: 'admin',
-      role: 'ADMIN',
+      roles: ['USER', 'ADMIN'],
       profile: { create: { firstName: 'Admin', lastName: 'Biktus' } },
     },
   });
@@ -177,14 +181,53 @@ async function main() {
   });
 
   // Enrollments
-  await prisma.activityEnrollment.create({
-    data: { sessionId: session1.id, userId: ana.id, status: 'confirmed' },
+  const enrollment1 = await prisma.activityEnrollment.create({
+    data: { sessionId: session1.id, userId: ana.id, status: 'confirmed', paymentStatus: 'paid' },
   });
-  await prisma.activityEnrollment.create({
+  const enrollment2 = await prisma.activityEnrollment.create({
     data: { sessionId: session1.id, userId: bruno.id, status: 'confirmed' },
   });
-  await prisma.activityEnrollment.create({
+  const enrollment3 = await prisma.activityEnrollment.create({
     data: { sessionId: session2.id, userId: ana.id, status: 'confirmed' },
+  });
+
+  // Payment: Ana paid for session 1 (teatro)
+  await prisma.payment.create({
+    data: {
+      userId: ana.id,
+      activityId: activity.id,
+      enrollmentId: enrollment1.id,
+      leaderId: carla.id,
+      totalAmount: 15000,
+      platformFee: 1500,
+      leaderAmount: 13500,
+      mpPreferenceId: 'seed-pref-001',
+      mpPaymentId: 'seed-pay-001',
+      mpStatus: 'approved',
+      paymentMethod: 'mercadopago',
+      status: 'completed',
+      transferStatus: 'pending',
+      paidAt: new Date(),
+    },
+  });
+
+  // Notifications
+  await prisma.notification.create({
+    data: {
+      userId: carla.id,
+      type: 'enrollment_confirmed',
+      title: 'Nueva inscripción',
+      body: 'Ana Silva se inscribió en Teatro de Improvisación',
+      metadata: { enrollmentId: enrollment1.id },
+    },
+  });
+  await prisma.notification.create({
+    data: {
+      userId: ana.id,
+      type: 'match_created',
+      title: '¡Nuevo match!',
+      body: 'Hiciste match con Bruno Pérez en Teatro de Improvisación',
+    },
   });
 
   // Swipe: Ana likes Bruno in session1
@@ -211,6 +254,29 @@ async function main() {
   const [userAId, userBId] = ana.id < bruno.id ? [ana.id, bruno.id] : [bruno.id, ana.id];
   await prisma.match.create({
     data: { userAId, userBId, sessionId: session1.id },
+  });
+
+  // User photo (example placeholder)
+  await prisma.userPhoto.create({
+    data: {
+      userId: ana.id,
+      url: 'https://placeholder.biktus.local/ana-1.webp',
+      format: 'webp',
+      position: 1,
+    },
+  });
+
+  // Leader bank info (Carla)
+  await prisma.leaderBankInfo.create({
+    data: {
+      userId: carla.id,
+      rut: '12.345.678-9',
+      holderName: 'Carla Mendoza',
+      bankName: 'BancoEstado',
+      accountType: 'cuenta_vista',
+      accountNumber: '12345678',
+      email: 'carla@biktus.local',
+    },
   });
 
   console.log('Seed completed successfully!');

@@ -34,6 +34,13 @@ export class ActivitiesController {
     return this.service.getMyActivities(req.user.sub);
   }
 
+  @Get(':id/dashboard')
+  @UseGuards(JwtGuard, RolesGuard)
+  @Roles('COMMUNITY_LEADER', 'ADMIN')
+  getDashboard(@Param('id') id: string, @Req() req: any) {
+    return this.service.getDashboard(id, req.user.sub);
+  }
+
   @Get(':id')
   findById(@Param('id') id: string) {
     return this.service.findById(id);

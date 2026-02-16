@@ -1,5 +1,5 @@
-import { IsString, IsOptional, IsEnum, IsArray } from 'class-validator';
-import { ActivityType } from '@prisma/client';
+import { IsString, IsOptional, IsEnum, IsArray, IsInt, Min } from 'class-validator';
+import { ActivityType, ActivityPricingModel } from '@prisma/client';
 
 export class CreateActivityDto {
   @IsString()
@@ -19,4 +19,13 @@ export class CreateActivityDto {
   @IsArray()
   @IsString({ each: true })
   interestIds?: string[];
+
+  @IsOptional()
+  @IsEnum(ActivityPricingModel)
+  pricingModel?: ActivityPricingModel;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  monthlyPriceCents?: number;
 }

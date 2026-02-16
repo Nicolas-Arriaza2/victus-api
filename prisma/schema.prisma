@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── ENUMS ──────────────────────────────────────────────
@@ -54,6 +55,69 @@ enum SwipeAction {
   PASS
 }
 
+enum BankAccountType {
+  cuenta_corriente
+  cuenta_vista
+  cuenta_ahorro
+  cuenta_rut
+}
+
+enum TransferStatus {
+  pending
+  transferred
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+  refunded
+}
+
+
+enum NotificationType {
+  enrollment_confirmed
+  match_created
+  session_reminder
+  payment_received
+  new_like
+  session_full
+  payment_confirmed
+  new_enrollment
+  transfer_completed
+  subscription_payment_due
+  subscription_payment_confirmed
+  subscription_overdue
+  subscription_cancelled
+  new_subscriber
+}
+
+enum ActivityPricingModel {
+  per_session
+  monthly_subscription
+}
+
+enum SubscriptionStatus {
+  active
+  pending_payment
+  overdue
+  cancelled
+}
+
+enum SubscriptionBillingStatus {
+  pending
+  paid
+  failed
+  cancelled
+}
+
+enum EnrollmentPaymentStatus {
+  pending_payment
+  paid
+  free
+}
+
 // ─── USERS ──────────────────────────────────────────────
 
 model User {
@@ -62,7 +126,7 @@ model User {
   passwordHash String
   phone        String?    @unique
   username     String?    @unique
-  role         UserRole   @default(USER)
+  roles        UserRole[] @default([USER])
   status       UserStatus @default(active)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -75,6 +139,13 @@ model User {
   swipesReceived SwipeEvent[]        @relation("swipes_received")
   matchesAsA    Match[]              @relation("match_user_a")
   matchesAsB    Match[]              @relation("match_user_b")
+  notifications  Notification[]
+  photos         UserPhoto[]
+  bankInfo       LeaderBankInfo?
+  payments                   Payment[]              @relation("UserPayments")
+  leaderPayments             Payment[]              @relation("LeaderPayments")
+  subscriptions              Subscription[]
+  leaderSubscriptionBillings SubscriptionBilling[]   @relation("LeaderSubscriptionBillings")
 }
 
 model UserProfile {
@@ -125,8 +196,13 @@ model Activity {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  sessions  ActivitySession[]
-  interests ActivityInterest[]
+  pricingModel       ActivityPricingModel @default(per_session)
+  monthlyPriceCents  Int?
+
+  sessions      ActivitySession[]
+  interests     ActivityInterest[]
+  payments      Payment[]
+  subscriptions Subscription[]
 }
 
 model ActivityInterest {
@@ -158,14 +234,17 @@ model ActivitySession {
 }
 
 model ActivityEnrollment {
-  id        String           @id @default(uuid())
-  sessionId String
-  session   ActivitySession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status    EnrollmentStatus @default(pending)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id            String                  @id @default(uuid())
+  sessionId     String
+  session       ActivitySession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        EnrollmentStatus        @default(pending)
+  paymentStatus EnrollmentPaymentStatus @default(free)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  payment Payment?
 
   @@unique([sessionId, userId])
 }
@@ -201,4 +280,142 @@ model Match {
   @@unique([userAId, userBId, sessionId])
   @@index([userAId])
   @@index([userBId])
+}
+
+// ─── PAYMENTS ─────────────────────────────────────────────
+
+model Payment {
+  id              String         @id @default(uuid())
+  userId          String
+  activityId      String
+  enrollmentId    String         @unique
+  leaderId        String
+  totalAmount     Decimal        @db.Decimal(10,2)
+  platformFee     Decimal        @db.Decimal(10,2)
+  leaderAmount    Decimal        @db.Decimal(10,2)
+  mpPreferenceId  String?
+  mpPaymentId     String?        @unique
+  mpStatus        String?
+  paymentMethod   String         @default("mercadopago")
+  status          PaymentStatus  @default(pending)
+  transferStatus  TransferStatus @default(pending)
+  transferredAt   DateTime?
+  transferredBy   String?
+  transferNotes   String?
+  paidAt          DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user       User               @relation("UserPayments", fields: [userId], references: [id])
+  activity   Activity           @relation(fields: [activityId], references: [id])
+  enrollment ActivityEnrollment @relation(fields: [enrollmentId], references: [id])
+  leader     User               @relation("LeaderPayments", fields: [leaderId], references: [id])
+
+  @@index([leaderId])
+  @@index([status])
+  @@index([transferStatus])
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+}
+
+// ─── USER PHOTOS ─────────────────────────────────────────
+
+model UserPhoto {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url            String
+  storageKey     String?
+  originalFormat String?
+  format         String   @default("webp")
+  position       Int
+  sizeBytes      Int?
+  width          Int?
+  height         Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, position])
+}
+
+// ─── LEADER BANK INFO ────────────────────────────────────
+
+model LeaderBankInfo {
+  id            String          @id @default(uuid())
+  userId        String          @unique
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rut           String
+  holderName    String
+  bankName      String
+  accountType   BankAccountType
+  accountNumber String
+  email         String
+  isVerified    Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+// ─── SUBSCRIPTIONS ───────────────────────────────────────
+
+model Subscription {
+  id                 String             @id @default(uuid())
+  userId             String
+  activityId         String
+  status             SubscriptionStatus @default(pending_payment)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity Activity               @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  billings SubscriptionBilling[]
+
+  @@unique([userId, activityId])
+}
+
+model SubscriptionBilling {
+  id               String                    @id @default(uuid())
+  subscriptionId   String
+  leaderId         String
+  periodStart      DateTime
+  periodEnd        DateTime
+  dueDate          DateTime
+  totalAmount      Decimal                   @db.Decimal(10, 2)
+  platformFee      Decimal                   @db.Decimal(10, 2)
+  leaderAmount     Decimal                   @db.Decimal(10, 2)
+  mpPreferenceId   String?
+  mpPaymentId      String?                   @unique
+  mpStatus         String?
+  status           SubscriptionBillingStatus @default(pending)
+  transferStatus   TransferStatus            @default(pending)
+  transferredAt    DateTime?
+  transferredBy    String?
+  transferNotes    String?
+  paidAt           DateTime?
+  notifiedAt       DateTime?
+  reminderSentAt   DateTime?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  leader       User         @relation("LeaderSubscriptionBillings", fields: [leaderId], references: [id])
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([transferStatus])
+  @@index([dueDate])
 }

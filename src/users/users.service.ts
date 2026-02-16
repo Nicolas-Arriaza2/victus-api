@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpsertBankInfoDto } from './dto/upsert-bank-info.dto';
 
 @Injectable()
 export class UsersService {
@@ -13,7 +18,7 @@ export class UsersService {
         id: true,
         email: true,
         username: true,
-        role: true,
+        roles: true,
         status: true,
         createdAt: true,
         profile: true,
@@ -30,11 +35,12 @@ export class UsersService {
         email: true,
         username: true,
         phone: true,
-        role: true,
+        roles: true,
         status: true,
         createdAt: true,
         profile: true,
         interests: { include: { interest: true } },
+        photos: { orderBy: { position: 'asc' } },
       },
     });
     if (!user) throw new NotFoundException('User not found');
@@ -63,5 +69,21 @@ export class UsersService {
       where: { userId },
       include: { interest: true },
     });
+  }
+
+  async upsertBankInfo(userId: string, dto: UpsertBankInfoDto) {
+    return this.prisma.leaderBankInfo.upsert({
+      where: { userId },
+      update: { ...dto },
+      create: { userId, ...dto },
+    });
+  }
+
+  async getBankInfo(userId: string) {
+    const info = await this.prisma.leaderBankInfo.findUnique({
+      where: { userId },
+    });
+    if (!info) throw new NotFoundException('Bank info not found');
+    return info;
   }
 }

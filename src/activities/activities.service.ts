@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -43,6 +44,15 @@ export class ActivitiesService {
   }
 
   async create(createdById: string, dto: CreateActivityDto) {
+    if (
+      dto.pricingModel === 'monthly_subscription' &&
+      (!dto.monthlyPriceCents || dto.monthlyPriceCents <= 0)
+    ) {
+      throw new BadRequestException(
+        'monthlyPriceCents is required and must be > 0 for monthly subscriptions',
+      );
+    }
+
     const { interestIds, ...data } = dto;
     return this.prisma.activity.create({
       data: {
@@ -63,6 +73,15 @@ export class ActivitiesService {
     if (!activity) throw new NotFoundException('Activity not found');
     if (activity.createdById !== userId)
       throw new ForbiddenException('Not your activity');
+
+    if (
+      dto.pricingModel === 'monthly_subscription' &&
+      (!dto.monthlyPriceCents || dto.monthlyPriceCents <= 0)
+    ) {
+      throw new BadRequestException(
+        'monthlyPriceCents is required and must be > 0 for monthly subscriptions',
+      );
+    }
 
     const { interestIds, ...data } = dto;
 
@@ -98,5 +117,66 @@ export class ActivitiesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getDashboard(id: string, userId: string) {
+    const activity = await this.prisma.activity.findUnique({
+      where: { id },
+      include: {
+        interests: { include: { interest: true } },
+        sessions: {
+          include: {
+            _count: {
+              select: { enrollments: true, swipes: true, matches: true },
+            },
+            enrollments: {
+              where: { paymentStatus: 'paid' },
+              select: { id: true },
+            },
+          },
+          orderBy: { startsAt: 'asc' },
+        },
+      },
+    });
+    if (!activity) throw new NotFoundException('Activity not found');
+    if (activity.createdById !== userId)
+      throw new ForbiddenException('Not your activity');
+
+    let totalEnrollmentsAllSessions = 0;
+    let totalMatchesAllSessions = 0;
+    let totalRevenueCents = 0;
+
+    const sessions = await Promise.all(
+      activity.sessions.map(async (s) => {
+        const revenueCents = s.priceCents
+          ? s.priceCents * s.enrollments.length
+          : 0;
+
+        totalEnrollmentsAllSessions += s._count.enrollments;
+        totalMatchesAllSessions += s._count.matches;
+        totalRevenueCents += revenueCents;
+
+        return {
+          id: s.id,
+          startsAt: s.startsAt,
+          capacity: s.capacity,
+          totalEnrollments: s._count.enrollments,
+          totalSwipes: s._count.swipes,
+          totalMatches: s._count.matches,
+          revenueCents,
+        };
+      }),
+    );
+
+    return {
+      id: activity.id,
+      title: activity.title,
+      type: activity.type,
+      interests: activity.interests.map((ai) => ai.interest),
+      totalEnrollmentsAllSessions,
+      totalMatchesAllSessions,
+      totalRevenueCents,
+      sessions,
+    };
   }
 }

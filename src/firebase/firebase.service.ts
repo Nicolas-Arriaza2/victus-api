@@ -13,11 +13,20 @@ export class FirebaseService implements OnModuleInit {
   constructor(private config: ConfigService) {}
 
   onModuleInit() {
-    const credPath = this.config.getOrThrow<string>(
-      'FIREBASE_CREDENTIALS_PATH',
-    );
-    const absolutePath = resolve(process.cwd(), credPath);
-    const serviceAccount = JSON.parse(readFileSync(absolutePath, 'utf-8'));
+    const credJson = this.config.get<string>('FIREBASE_CREDENTIALS_JSON');
+    let serviceAccount: any;
+
+    if (credJson) {
+      serviceAccount = JSON.parse(credJson);
+      this.logger.log('Firebase credentials loaded from env var');
+    } else {
+      const credPath = this.config.getOrThrow<string>(
+        'FIREBASE_CREDENTIALS_PATH',
+      );
+      const absolutePath = resolve(process.cwd(), credPath);
+      serviceAccount = JSON.parse(readFileSync(absolutePath, 'utf-8'));
+      this.logger.log('Firebase credentials loaded from file');
+    }
 
     const bucketUrl = this.config
       .getOrThrow<string>('FIREBASE_STORAGE_BUCKET')

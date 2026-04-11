@@ -14,8 +14,23 @@ export class SwipesController {
   }
 
   @Get('discover')
-  getDiscoverCandidates(@Req() req: any) {
-    return this.service.getDiscoverCandidates(req.user.sub);
+  getDiscoverCandidates(
+    @Req() req: any,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('maxDistance') maxDistance?: string,
+    @Query('minAge') minAge?: string,
+    @Query('maxAge') maxAge?: string,
+    @Query('gender') gender?: string,
+  ) {
+    return this.service.getDiscoverCandidates(req.user.sub, {
+      lat: lat ? parseFloat(lat) : undefined,
+      lng: lng ? parseFloat(lng) : undefined,
+      maxDistance: maxDistance ? parseInt(maxDistance, 10) : undefined,
+      minAge: minAge ? parseInt(minAge, 10) : undefined,
+      maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
+      gender,
+    });
   }
 
   @Get('candidates')

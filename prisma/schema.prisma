@@ -156,7 +156,11 @@ model UserProfile {
   firstName String?
   lastName  String?
   birthdate DateTime?
-  gender    Gender?
+  gender              Gender?
+  genderDetails       String[]  @default([])
+  sexualOrientation   String[]  @default([])
+  showGender          Boolean   @default(true)
+  showOrientation     Boolean   @default(true)
   bio       String?
   avatarUrl String?
   city      String?

@@ -31,6 +31,17 @@ export class EnrollmentsController {
     return this.service.cancel(req.user.sub, id);
   }
 
+  @Patch(':id/mark-paid')
+  @UseGuards(RolesGuard)
+  @Roles('COMMUNITY_LEADER', 'ADMIN')
+  markPaymentStatus(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body('paid') paid: boolean,
+  ) {
+    return this.service.markPaymentStatus(id, req.user.sub, paid);
+  }
+
   @Patch(':id/status')
   @UseGuards(RolesGuard)
   @Roles('COMMUNITY_LEADER', 'ADMIN')

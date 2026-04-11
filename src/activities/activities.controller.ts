@@ -47,8 +47,7 @@ export class ActivitiesController {
   }
 
   @Post()
-  @UseGuards(JwtGuard, RolesGuard)
-  @Roles('COMMUNITY_LEADER', 'ADMIN')
+  @UseGuards(JwtGuard)
   create(@Req() req: any, @Body() dto: CreateActivityDto) {
     return this.service.create(req.user.sub, dto);
   }

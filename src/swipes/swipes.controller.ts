@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Query,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { SwipesService } from './swipes.service';
 import { CreateSwipeDto } from './dto/create-swipe.dto';
 import { JwtGuard } from '../auth/guards/jwt.guard';
@@ -21,19 +13,18 @@ export class SwipesController {
     return this.service.swipe(req.user.sub, dto);
   }
 
+  @Get('discover')
+  getDiscoverCandidates(@Req() req: any) {
+    return this.service.getDiscoverCandidates(req.user.sub);
+  }
+
   @Get('candidates')
-  getCandidates(
-    @Req() req: any,
-    @Query('sessionId') sessionId: string,
-  ) {
+  getCandidates(@Req() req: any, @Query('sessionId') sessionId: string) {
     return this.service.getCandidates(req.user.sub, sessionId);
   }
 
   @Get('who-liked-me')
-  whoLikedMe(
-    @Req() req: any,
-    @Query('sessionId') sessionId: string,
-  ) {
+  whoLikedMe(@Req() req: any, @Query('sessionId') sessionId: string) {
     return this.service.whoLikedMe(req.user.sub, sessionId);
   }
 }

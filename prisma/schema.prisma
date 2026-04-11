@@ -254,32 +254,31 @@ model ActivityEnrollment {
 // ─── SOCIAL: SWIPES & MATCHES ───────────────────────────
 
 model SwipeEvent {
-  id        String          @id @default(uuid())
+  id        String           @id @default(uuid())
   byUserId  String
   toUserId  String
-  sessionId String
+  sessionId String?
   action    SwipeAction
-  byUser    User            @relation("swipes_given", fields: [byUserId], references: [id])
-  toUser    User            @relation("swipes_received", fields: [toUserId], references: [id])
-  session   ActivitySession @relation(fields: [sessionId], references: [id])
-  createdAt DateTime        @default(now())
+  byUser    User             @relation("swipes_given", fields: [byUserId], references: [id])
+  toUser    User             @relation("swipes_received", fields: [toUserId], references: [id])
+  session   ActivitySession? @relation(fields: [sessionId], references: [id])
+  createdAt DateTime         @default(now())
 
-  @@unique([byUserId, toUserId, sessionId])
   @@index([toUserId, sessionId])
   @@index([byUserId, sessionId])
+  @@index([byUserId, toUserId])
 }
 
 model Match {
-  id        String          @id @default(uuid())
+  id        String           @id @default(uuid())
   userAId   String
   userBId   String
-  sessionId String
-  userA     User            @relation("match_user_a", fields: [userAId], references: [id])
-  userB     User            @relation("match_user_b", fields: [userBId], references: [id])
-  session   ActivitySession @relation(fields: [sessionId], references: [id])
-  createdAt DateTime        @default(now())
+  sessionId String?
+  userA     User             @relation("match_user_a", fields: [userAId], references: [id])
+  userB     User             @relation("match_user_b", fields: [userBId], references: [id])
+  session   ActivitySession? @relation(fields: [sessionId], references: [id])
+  createdAt DateTime         @default(now())
 
-  @@unique([userAId, userBId, sessionId])
   @@index([userAId])
   @@index([userBId])
 }

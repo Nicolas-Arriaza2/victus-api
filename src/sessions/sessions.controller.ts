@@ -25,6 +25,12 @@ export class SessionsController {
     return this.service.findByActivity(activityId);
   }
 
+  @Post(':id/notify-payment-reminder')
+  @UseGuards(JwtGuard)
+  notifyPaymentReminder(@Param('id') id: string, @Req() req: any) {
+    return this.service.notifyPaymentReminder(id, req.user.sub);
+  }
+
   @Get(':id/stats')
   @UseGuards(JwtGuard, RolesGuard)
   @Roles('COMMUNITY_LEADER', 'ADMIN')

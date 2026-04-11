@@ -1,122 +1,123 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSwipeDto } from './dto/create-swipe.dto';
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class SwipesService {
-  constructor(
-    private prisma: PrismaService,
-    private subscriptions: SubscriptionsService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async swipe(byUserId: string, dto: CreateSwipeDto) {
     if (byUserId === dto.toUserId)
       throw new BadRequestException('Cannot swipe yourself');
 
-    // Check subscription access for monthly activities
-    const session = await this.prisma.activitySession.findUnique({
-      where: { id: dto.sessionId },
-      include: { activity: true },
-    });
-    if (session?.activity.pricingModel === 'monthly_subscription') {
-      await this.subscriptions.verifyActiveSubscription(
-        byUserId,
-        session.activityId,
-      );
+    if (dto.sessionId) {
+      const enrollments = await this.prisma.activityEnrollment.findMany({
+        where: {
+          sessionId: dto.sessionId,
+          userId: { in: [byUserId, dto.toUserId] },
+          status: { not: 'cancelled' },
+        },
+      });
+      if (enrollments.length < 2)
+        throw new BadRequestException('Both users must be enrolled in the session');
     }
 
-    // Verify both users are enrolled in the session
-    const enrollments = await this.prisma.activityEnrollment.findMany({
+    const existing = await this.prisma.swipeEvent.findFirst({
       where: {
-        sessionId: dto.sessionId,
-        userId: { in: [byUserId, dto.toUserId] },
-        status: { not: 'cancelled' },
-      },
-    });
-    if (enrollments.length < 2)
-      throw new BadRequestException(
-        'Both users must be enrolled in the session',
-      );
-
-    // Upsert the swipe (allows changing from PASS to LIKE)
-    const swipe = await this.prisma.swipeEvent.upsert({
-      where: {
-        byUserId_toUserId_sessionId: {
-          byUserId,
-          toUserId: dto.toUserId,
-          sessionId: dto.sessionId,
-        },
-      },
-      update: { action: dto.action },
-      create: {
         byUserId,
         toUserId: dto.toUserId,
-        sessionId: dto.sessionId,
-        action: dto.action,
+        sessionId: dto.sessionId ?? undefined,
       },
     });
 
-    // Check for mutual like -> create match
+    if (existing) {
+      await this.prisma.swipeEvent.update({
+        where: { id: existing.id },
+        data: { action: dto.action },
+      });
+    } else {
+      const createData: any = { byUserId, toUserId: dto.toUserId, action: dto.action };
+      if (dto.sessionId) createData.sessionId = dto.sessionId;
+      await this.prisma.swipeEvent.create({ data: createData });
+    }
+
+    // Check for mutual LIKE → create match
     let match: any = null;
     if (dto.action === 'LIKE') {
-      const reciprocal = await this.prisma.swipeEvent.findUnique({
+      const reciprocal = await this.prisma.swipeEvent.findFirst({
         where: {
-          byUserId_toUserId_sessionId: {
-            byUserId: dto.toUserId,
-            toUserId: byUserId,
-            sessionId: dto.sessionId,
-          },
+          byUserId: dto.toUserId,
+          toUserId: byUserId,
+          sessionId: dto.sessionId ?? undefined,
         },
       });
 
       if (reciprocal?.action === 'LIKE') {
-        // Normalize order: smaller UUID is userA
         const [userAId, userBId] =
           byUserId < dto.toUserId
             ? [byUserId, dto.toUserId]
             : [dto.toUserId, byUserId];
 
-        match = await this.prisma.match.upsert({
+        const existingMatch = await this.prisma.match.findFirst({
           where: {
-            userAId_userBId_sessionId: {
-              userAId,
-              userBId,
-              sessionId: dto.sessionId,
-            },
+            userAId,
+            userBId,
+            sessionId: dto.sessionId ?? undefined,
           },
-          update: {},
-          create: { userAId, userBId, sessionId: dto.sessionId },
         });
+
+        if (!existingMatch) {
+          const matchData: any = { userAId, userBId };
+          if (dto.sessionId) matchData.sessionId = dto.sessionId;
+          match = await this.prisma.match.create({ data: matchData });
+        } else {
+          match = existingMatch;
+        }
       }
     }
 
-    return { swipe, match };
+    return { match };
   }
 
-  getCandidates(userId: string, sessionId: string) {
-    // Return enrolled users in this session that the current user hasn't swiped yet
+  // Global discover: users with overlapping interests, not yet swiped
+  getDiscoverCandidates(userId: string) {
     return this.prisma.user.findMany({
       where: {
-        enrollments: {
-          some: { sessionId, status: { not: 'cancelled' } },
-        },
         id: { not: userId },
+        status: 'active',
+        interests: { some: {} },
         NOT: {
           swipesReceived: {
-            some: { byUserId: userId, sessionId },
+            some: { byUserId: userId, sessionId: undefined },
           },
         },
       },
       select: {
         id: true,
         username: true,
+        profile: {
+          select: { firstName: true, lastName: true, avatarUrl: true, bio: true, city: true },
+        },
+        interests: { include: { interest: true } },
+        photos: { orderBy: { position: 'asc' }, take: 3 },
+      },
+      take: 30,
+    });
+  }
+
+  getCandidates(userId: string, sessionId: string) {
+    return this.prisma.user.findMany({
+      where: {
+        enrollments: { some: { sessionId, status: { not: 'cancelled' } } },
+        id: { not: userId },
+        NOT: { swipesReceived: { some: { byUserId: userId, sessionId } } },
+      },
+      select: {
+        id: true,
+        username: true,
         profile: true,
         interests: { include: { interest: true } },
+        photos: { orderBy: { position: 'asc' }, take: 1 },
       },
     });
   }
@@ -129,9 +130,7 @@ export class SwipesService {
           select: {
             id: true,
             username: true,
-            profile: {
-              select: { firstName: true, lastName: true, avatarUrl: true },
-            },
+            profile: { select: { firstName: true, lastName: true, avatarUrl: true } },
           },
         },
       },

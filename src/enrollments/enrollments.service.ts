@@ -7,12 +7,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class EnrollmentsService {
   constructor(
     private prisma: PrismaService,
     private subscriptions: SubscriptionsService,
+    private notifications: NotificationsService,
   ) {}
 
   async enroll(userId: string, sessionId: string) {
@@ -101,6 +103,43 @@ export class EnrollmentsService {
         },
       },
     });
+  }
+
+  async markPaymentStatus(
+    enrollmentId: string,
+    leaderId: string,
+    paid: boolean,
+  ) {
+    const enrollment = await this.prisma.activityEnrollment.findUnique({
+      where: { id: enrollmentId },
+      include: { session: { include: { activity: true } } },
+    });
+    if (!enrollment) throw new NotFoundException('Enrollment not found');
+    if (enrollment.session.activity.createdById !== leaderId)
+      throw new ForbiddenException('Not your activity');
+
+    const updated = await this.prisma.activityEnrollment.update({
+      where: { id: enrollmentId },
+      data: {
+        paymentStatus: paid ? 'paid' : 'pending_payment',
+        status: paid ? 'confirmed' : enrollment.status,
+      },
+      include: {
+        user: { select: { id: true, username: true, profile: { select: { firstName: true } } } },
+      },
+    });
+
+    if (paid) {
+      await this.notifications.create(
+        enrollment.userId,
+        'payment_confirmed',
+        'Pago confirmado',
+        `Tu pago para ${enrollment.session.activity.title} fue confirmado.`,
+        { enrollmentId, activityId: enrollment.session.activityId },
+      );
+    }
+
+    return updated;
   }
 
   async updateStatusByLeader(

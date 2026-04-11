@@ -12,6 +12,11 @@ export class MatchesController {
     return this.service.getMyMatches(req.user.sub);
   }
 
+  @Get('stats')
+  getCompatibilityStats(@Req() req: any) {
+    return this.service.getCompatibilityStats(req.user.sub);
+  }
+
   @Get('session')
   getSessionMatches(
     @Req() req: any,

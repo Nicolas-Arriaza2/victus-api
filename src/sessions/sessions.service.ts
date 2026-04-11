@@ -4,12 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
 
 @Injectable()
 export class SessionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async create(userId: string, dto: CreateSessionDto) {
     const activity = await this.prisma.activity.findUnique({
@@ -89,6 +93,40 @@ export class SessionsService {
         ...(dto.longitude !== undefined && { longitude: dto.longitude }),
       },
     });
+  }
+
+  async notifyPaymentReminder(sessionId: string, leaderId: string) {
+    const session = await this.prisma.activitySession.findUnique({
+      where: { id: sessionId },
+      include: { activity: true },
+    });
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.activity.createdById !== leaderId)
+      throw new ForbiddenException('Not your session');
+
+    const enrollments = await this.prisma.activityEnrollment.findMany({
+      where: {
+        sessionId,
+        status: { not: 'cancelled' },
+        paymentStatus: 'pending_payment',
+      },
+      select: { userId: true },
+    });
+
+    const activityTitle = session.activity.title;
+    await Promise.all(
+      enrollments.map((e) =>
+        this.notifications.create(
+          e.userId,
+          'payment_received',
+          'Recordatorio de pago',
+          `Tienes un pago pendiente para ${activityTitle}.`,
+          { sessionId, activityId: session.activityId },
+        ),
+      ),
+    );
+
+    return { notified: enrollments.length };
   }
 
   async getStats(id: string, userId: string) {

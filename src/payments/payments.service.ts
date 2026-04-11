@@ -239,7 +239,7 @@ export class PaymentsService {
       .filter((p) => p.transferStatus === 'transferred')
       .reduce((sum, p) => sum + Number(p.leaderAmount), 0);
 
-    return { totalEarnings, pendingTransfer, transferred, payments };
+    return { totalEarnings, pendingTransfers: pendingTransfer, completedTransfers: transferred, payments };
   }
 
   async getPendingTransfers() {

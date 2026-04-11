@@ -131,6 +131,8 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  expoPushToken String?
+
   profile       UserProfile?
   interests     UserInterest[]
   activities    Activity[]           @relation("activity_creator")

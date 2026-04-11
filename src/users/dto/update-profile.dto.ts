@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, IsEnum, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsEnum, IsDateString, IsArray, IsBoolean } from 'class-validator';
 import { Gender } from '@prisma/client';
 
 export class UpdateProfileDto {
@@ -21,6 +21,24 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  genderDetails?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  sexualOrientation?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  showGender?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showOrientation?: boolean;
 
   @IsOptional()
   @IsString()

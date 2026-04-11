@@ -48,14 +48,24 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    const data: any = { ...dto };
+    const { username, ...profileFields } = dto;
+    const data: any = { ...profileFields };
     if (dto.birthdate) data.birthdate = new Date(dto.birthdate);
 
-    return this.prisma.userProfile.upsert({
+    if (username !== undefined) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { username },
+      });
+    }
+
+    await this.prisma.userProfile.upsert({
       where: { userId },
       update: data,
       create: { userId, ...data },
     });
+
+    return this.findById(userId);
   }
 
   async setInterests(userId: string, interestIds: string[]) {

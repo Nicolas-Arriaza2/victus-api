@@ -4,6 +4,10 @@ import { Gender } from '@prisma/client';
 export class UpdateProfileDto {
   @IsOptional()
   @IsString()
+  username?: string;
+
+  @IsOptional()
+  @IsString()
   firstName?: string;
 
   @IsOptional()

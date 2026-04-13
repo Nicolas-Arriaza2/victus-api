@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 
 @Injectable()
 export class EmailService {
@@ -21,9 +20,13 @@ export class EmailService {
 
     this.logger.log(`Enviando código a ${email} via Resend API...`);
 
-    const { data } = await axios.post(
-      'https://api.resend.com/emails',
-      {
+    const res = await fetch('https://api.resend.com/emails', {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         from,
         to:      [email],
         subject: 'Código para restablecer tu contraseña — Biktus',
@@ -42,15 +45,11 @@ export class EmailService {
             </p>
           </div>
         `,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
+      }),
+    });
 
+    const data = await res.json() as any;
+    if (!res.ok) throw new Error(`Resend error: ${JSON.stringify(data)}`);
     this.logger.log(`Email enviado: ${data?.id}`);
   }
 }

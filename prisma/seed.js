@@ -21,19 +21,51 @@ async function main() {
   await prisma.userProfile.deleteMany();
   await prisma.user.deleteMany();
 
-  // ── Interests catalog ──────────────────────────────────────────────────────
-  const [trekking, teatro, danza, fitness, gastronomia, musica, arte, deportes, bienestar, aireLibre] = await Promise.all([
-    prisma.interest.create({ data: { name: 'Trekking',    slug: 'trekking'   } }),
-    prisma.interest.create({ data: { name: 'Teatro',      slug: 'teatro'     } }),
-    prisma.interest.create({ data: { name: 'Danza',       slug: 'danza'      } }),
-    prisma.interest.create({ data: { name: 'Fitness',     slug: 'fitness'    } }),
-    prisma.interest.create({ data: { name: 'Gastronomía', slug: 'gastronomia'} }),
-    prisma.interest.create({ data: { name: 'Música',      slug: 'musica'     } }),
-    prisma.interest.create({ data: { name: 'Arte',        slug: 'arte'       } }),
-    prisma.interest.create({ data: { name: 'Deportes',    slug: 'deportes'   } }),
-    prisma.interest.create({ data: { name: 'Bienestar',   slug: 'bienestar'  } }),
-    prisma.interest.create({ data: { name: 'Aire libre',  slug: 'aire-libre' } }),
-  ]);
+  // ── Interests catalog (25 etiquetas en 5 categorías) ──────────────────────
+  const interestData = [
+    // Baile & Música
+    { name: 'Salsa',          slug: 'salsa'          },
+    { name: 'Bachata',        slug: 'bachata'        },
+    { name: 'Tango',          slug: 'tango'          },
+    { name: 'Reggaetón',      slug: 'reggaeton'      },
+    { name: 'Folclore',       slug: 'folclore'       },
+    { name: 'Música',         slug: 'musica'         },
+    // Deporte & Naturaleza
+    { name: 'Trekking',       slug: 'trekking'       },
+    { name: 'Senderismo',     slug: 'senderismo'     },
+    { name: 'Escalada',       slug: 'escalada'       },
+    { name: 'Ciclismo',       slug: 'ciclismo'       },
+    { name: 'Running',        slug: 'running'        },
+    { name: 'Surf',           slug: 'surf'           },
+    // Artes & Escena
+    { name: 'Teatro',         slug: 'teatro'         },
+    { name: 'Comedia',        slug: 'comedia'        },
+    { name: 'Fotografía',     slug: 'fotografia'     },
+    { name: 'Arte',           slug: 'arte'           },
+    { name: 'Cine',           slug: 'cine'           },
+    // Social & Grupal
+    { name: 'Juegos de mesa', slug: 'juegos-de-mesa' },
+    { name: 'Asados',         slug: 'asados'         },
+    { name: 'Voluntariado',   slug: 'voluntariado'   },
+    { name: 'Viajes grupales',slug: 'viajes-grupales'},
+    // Bienestar
+    { name: 'Yoga',           slug: 'yoga'           },
+    { name: 'Fitness',        slug: 'fitness'        },
+    { name: 'Meditación',     slug: 'meditacion'     },
+    { name: 'Gastronomía',    slug: 'gastronomia'    },
+  ];
+
+  const allInterests = await Promise.all(
+    interestData.map((d) => prisma.interest.create({ data: d })),
+  );
+
+  const bySlug = Object.fromEntries(allInterests.map((i) => [i.slug, i]));
+
+  // Aliases for easy reference
+  const { salsa, bachata, tango, musica, trekking, senderismo, escalada, ciclismo,
+    running, surf, teatro, comedia, fotografia, arte, cine,
+    'juegos-de-mesa': juegosMesa, asados, voluntariado, 'viajes-grupales': viajesGrupales,
+    yoga, fitness, meditacion, gastronomia } = bySlug;
 
   const password = await argon2.hash('password123');
 
@@ -60,8 +92,9 @@ async function main() {
       },
       interests: {
         create: [
-          { interestId: bienestar.id },
-          { interestId: danza.id },
+          { interestId: yoga.id },
+          { interestId: meditacion.id },
+          { interestId: salsa.id },
           { interestId: musica.id },
         ],
       },
@@ -92,7 +125,8 @@ async function main() {
           { interestId: teatro.id },
           { interestId: trekking.id },
           { interestId: arte.id },
-          { interestId: bienestar.id },
+          { interestId: yoga.id },
+          { interestId: fotografia.id },
         ],
       },
     },
@@ -120,9 +154,9 @@ async function main() {
       interests: {
         create: [
           { interestId: fitness.id },
-          { interestId: deportes.id },
+          { interestId: running.id },
           { interestId: gastronomia.id },
-          { interestId: bienestar.id },
+          { interestId: asados.id },
         ],
       },
     },
@@ -151,7 +185,8 @@ async function main() {
         create: [
           { interestId: musica.id },
           { interestId: trekking.id },
-          { interestId: aireLibre.id },
+          { interestId: senderismo.id },
+          { interestId: escalada.id },
         ],
       },
     },
@@ -178,8 +213,9 @@ async function main() {
       },
       interests: {
         create: [
-          { interestId: danza.id },
-          { interestId: bienestar.id },
+          { interestId: salsa.id },
+          { interestId: bachata.id },
+          { interestId: yoga.id },
           { interestId: musica.id },
           { interestId: arte.id },
         ],
@@ -210,7 +246,9 @@ async function main() {
         create: [
           { interestId: gastronomia.id },
           { interestId: teatro.id },
-          { interestId: arte.id },
+          { interestId: comedia.id },
+          { interestId: cine.id },
+          { interestId: juegosMesa.id },
         ],
       },
     },
@@ -237,10 +275,11 @@ async function main() {
       },
       interests: {
         create: [
-          { interestId: deportes.id },
+          { interestId: running.id },
           { interestId: trekking.id },
+          { interestId: ciclismo.id },
           { interestId: fitness.id },
-          { interestId: aireLibre.id },
+          { interestId: voluntariado.id },
         ],
       },
     },
@@ -260,7 +299,7 @@ async function main() {
   // ── Activities ─────────────────────────────────────────────────────────────
 
   // Main test activity — Yoga (Valentina's)
-  const yoga = await prisma.activity.create({
+  const yogaActivity = await prisma.activity.create({
     data: {
       slug: 'yoga-y-meditacion-biktus',
       title: 'Yoga y Meditación',
@@ -269,15 +308,15 @@ async function main() {
       createdById: valentina.id,
       interests: {
         create: [
-          { interestId: bienestar.id },
-          { interestId: danza.id },
+          { interestId: yoga.id },
+          { interestId: meditacion.id },
         ],
       },
     },
   });
 
-  // Second activity — Teatro (Gabriel leads)
-  const teatro_act = await prisma.activity.create({
+  // Second activity — Teatro
+  const teatroActivity = await prisma.activity.create({
     data: {
       slug: 'taller-teatro-impro',
       title: 'Taller de Improvisación Teatral',
@@ -287,6 +326,7 @@ async function main() {
       interests: {
         create: [
           { interestId: teatro.id },
+          { interestId: comedia.id },
           { interestId: arte.id },
         ],
       },
@@ -294,7 +334,7 @@ async function main() {
   });
 
   // Third activity — Trekking
-  const trekking_act = await prisma.activity.create({
+  const trekkingActivity = await prisma.activity.create({
     data: {
       slug: 'trekking-cajon-maipo',
       title: 'Trekking Cajón del Maipo',
@@ -304,7 +344,7 @@ async function main() {
       interests: {
         create: [
           { interestId: trekking.id },
-          { interestId: aireLibre.id },
+          { interestId: senderismo.id },
         ],
       },
     },
@@ -314,7 +354,7 @@ async function main() {
 
   const yogaSession = await prisma.activitySession.create({
     data: {
-      activityId: yoga.id,
+      activityId: yogaActivity.id,
       startsAt: new Date('2026-04-20T10:00:00Z'),
       endsAt: new Date('2026-04-20T11:30:00Z'),
       capacity: 12,
@@ -327,7 +367,7 @@ async function main() {
 
   const teatroSession = await prisma.activitySession.create({
     data: {
-      activityId: teatro_act.id,
+      activityId: teatroActivity.id,
       startsAt: new Date('2026-04-25T19:00:00Z'),
       endsAt: new Date('2026-04-25T21:00:00Z'),
       capacity: 15,
@@ -340,7 +380,7 @@ async function main() {
 
   const trekkingSession = await prisma.activitySession.create({
     data: {
-      activityId: trekking_act.id,
+      activityId: trekkingActivity.id,
       startsAt: new Date('2026-05-03T08:00:00Z'),
       endsAt: new Date('2026-05-03T17:00:00Z'),
       capacity: 10,
@@ -386,7 +426,7 @@ async function main() {
   await prisma.payment.create({
     data: {
       userId: ana.id,
-      activityId: yoga.id,
+      activityId: yogaActivity.id,
       enrollmentId: e_ana_yoga.id,
       leaderId: valentina.id,
       totalAmount: 12000,
@@ -402,7 +442,7 @@ async function main() {
   await prisma.payment.create({
     data: {
       userId: fernanda.id,
-      activityId: yoga.id,
+      activityId: yogaActivity.id,
       enrollmentId: e_fernanda_yoga.id,
       leaderId: valentina.id,
       totalAmount: 12000,

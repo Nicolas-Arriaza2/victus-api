@@ -82,7 +82,12 @@ export class AuthService {
       data: { resetCode: codeHash, resetCodeExpiry: expiry },
     });
 
-    await this.email.sendPasswordResetCode(user.email, code);
+    try {
+      await this.email.sendPasswordResetCode(user.email, code);
+    } catch (err) {
+      // Log the error but don't expose it — code is already saved in DB
+      console.error('[Auth] Error sending reset email:', err?.message ?? err);
+    }
 
     return { message: 'Si el email existe, recibirás un código.' };
   }

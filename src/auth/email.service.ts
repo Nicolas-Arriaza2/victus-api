@@ -32,6 +32,7 @@ export class EmailService {
       return;
     }
 
+    this.logger.log(`Sending reset code to ${email} via SMTP...`);
     await this.transporter.sendMail({
       from,
       to: email,

@@ -9,12 +9,12 @@ export class EmailService {
   constructor(private config: ConfigService) {}
 
   async sendPasswordResetCode(email: string, code: string): Promise<void> {
-    const apiKey = this.config.get<string>('RESEND_API_KEY');
-    const from   = this.config.get<string>('RESEND_FROM') ?? 'noreply@biktus.com';
+    const apiKey = this.config.get<string>('SMTP_PASS');
+    const from   = this.config.get<string>('SMTP_FROM') ?? 'noreply@biktus.com';
 
     if (!apiKey) {
       this.logger.warn(
-        `[DEV] Código de recuperación para ${email}: ${code} — agrega RESEND_API_KEY para enviar emails reales.`,
+        `[DEV] Código de recuperación para ${email}: ${code} — agrega SMTP_PASS para enviar emails reales.`,
       );
       return;
     }

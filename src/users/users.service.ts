@@ -96,4 +96,112 @@ export class UsersService {
     if (!info) throw new NotFoundException('Bank info not found');
     return info;
   }
+
+  async getLeaderStats(userId: string) {
+    const now = new Date();
+    const last7  = new Date(now.getTime() - 7  * 24 * 3600 * 1000);
+    const last30 = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+
+    // ── Activities & Sessions ──────────────────────────────────────────────
+    const activities = await this.prisma.activity.findMany({
+      where: { createdById: userId },
+      include: {
+        sessions: { select: { id: true, startsAt: true } },
+        enrollments: false,
+      },
+    });
+
+    const totalActivities = activities.length;
+    const totalSessions   = activities.reduce((s, a) => s + a.sessions.length, 0);
+    const upcomingSessions = activities.reduce(
+      (s, a) => s + a.sessions.filter((ss) => ss.startsAt > now).length,
+      0,
+    );
+
+    // ── Enrollments ────────────────────────────────────────────────────────
+    const sessionIds = activities.flatMap((a) => a.sessions.map((s) => s.id));
+
+    const enrollments = await this.prisma.activityEnrollment.findMany({
+      where: { sessionId: { in: sessionIds } },
+      select: { status: true, paymentStatus: true, createdAt: true, userId: true },
+    });
+
+    const totalEnrollments    = enrollments.length;
+    const confirmedEnrollments = enrollments.filter((e) => e.status === 'confirmed').length;
+    const pendingEnrollments  = enrollments.filter((e) => e.status === 'pending').length;
+    const enrollmentsLast7    = enrollments.filter((e) => e.createdAt >= last7).length;
+    const enrollmentsLast30   = enrollments.filter((e) => e.createdAt >= last30).length;
+    const uniqueParticipants  = new Set(enrollments.map((e) => e.userId)).size;
+
+    // ── Revenue ────────────────────────────────────────────────────────────
+    const payments = await this.prisma.payment.findMany({
+      where: { leaderId: userId, status: 'completed' },
+      select: { leaderAmount: true, transferStatus: true, paidAt: true },
+    });
+
+    const totalRevenue     = payments.reduce((s, p) => s + Number(p.leaderAmount), 0);
+    const transferred      = payments
+      .filter((p) => p.transferStatus === 'transferred')
+      .reduce((s, p) => s + Number(p.leaderAmount), 0);
+    const pendingTransfer  = totalRevenue - transferred;
+    const revenueLast30    = payments
+      .filter((p) => p.paidAt && p.paidAt >= last30)
+      .reduce((s, p) => s + Number(p.leaderAmount), 0);
+
+    // ── Social (matches inside leader's sessions) ──────────────────────────
+    const matchesInSessions = await this.prisma.match.count({
+      where: { sessionId: { in: sessionIds } },
+    });
+
+    // ── Top activities by enrollment count ────────────────────────────────
+    const activityEnrollmentCounts = await Promise.all(
+      activities.map(async (a) => {
+        const actSessIds = a.sessions.map((s) => s.id);
+        const count = await this.prisma.activityEnrollment.count({
+          where: { sessionId: { in: actSessIds } },
+        });
+        const revenue = await this.prisma.payment.aggregate({
+          where: { activityId: a.id, leaderId: userId, status: 'completed' },
+          _sum: { leaderAmount: true },
+        });
+        return {
+          id: a.id,
+          title: a.title,
+          type: a.type,
+          enrollmentCount: count,
+          revenue: Number(revenue._sum.leaderAmount ?? 0),
+        };
+      }),
+    );
+
+    const topActivities = activityEnrollmentCounts
+      .sort((a, b) => b.enrollmentCount - a.enrollmentCount)
+      .slice(0, 5);
+
+    return {
+      activities: {
+        total: totalActivities,
+        sessions: totalSessions,
+        upcoming: upcomingSessions,
+      },
+      enrollments: {
+        total: totalEnrollments,
+        confirmed: confirmedEnrollments,
+        pending: pendingEnrollments,
+        last7days: enrollmentsLast7,
+        last30days: enrollmentsLast30,
+        uniqueParticipants,
+      },
+      revenue: {
+        total: totalRevenue,
+        pending: pendingTransfer,
+        transferred,
+        last30days: revenueLast30,
+      },
+      social: {
+        matchesInSessions,
+      },
+      topActivities,
+    };
+  }
 }

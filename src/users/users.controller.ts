@@ -31,6 +31,13 @@ export class UsersController {
     return this.service.findById(req.user.sub);
   }
 
+  @Get('me/stats')
+  @UseGuards(RolesGuard)
+  @Roles('COMMUNITY_LEADER', 'ADMIN')
+  getLeaderStats(@Req() req: any) {
+    return this.service.getLeaderStats(req.user.sub);
+  }
+
   @Get('me/bank-info')
   @UseGuards(RolesGuard)
   @Roles('COMMUNITY_LEADER', 'ADMIN')

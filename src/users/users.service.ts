@@ -147,12 +147,19 @@ export class UsersService {
       .filter((p) => p.paidAt && p.paidAt >= last30)
       .reduce((s, p) => s + Number(p.leaderAmount), 0);
 
-    // ── Social (matches inside leader's sessions) ──────────────────────────
-    const matchesInSessions = await this.prisma.match.count({
-      where: { sessionId: { in: sessionIds } },
+    // ── Social: likes received by leader ──────────────────────────────────
+    const enrolledUserSet = new Set(enrollments.map((e) => e.userId));
+
+    const likesReceived = await this.prisma.swipeEvent.findMany({
+      where: { toUserId: userId, action: 'LIKE' },
+      select: { byUserId: true },
     });
 
-    // ── Top activities by enrollment count ────────────────────────────────
+    const totalLikes            = likesReceived.length;
+    const likesFromParticipants = likesReceived.filter((l) => enrolledUserSet.has(l.byUserId)).length;
+    const likesFromProspects    = totalLikes - likesFromParticipants;
+
+    // ── Top activities by enrollment count + compatibility ─────────────────
     const activityEnrollmentCounts = await Promise.all(
       activities.map(async (a) => {
         const actSessIds = a.sessions.map((s) => s.id);
@@ -163,12 +170,17 @@ export class UsersService {
           where: { activityId: a.id, leaderId: userId, status: 'completed' },
           _sum: { leaderAmount: true },
         });
+        // Compatibility = likes the leader received within this activity's sessions
+        const compatibility = await this.prisma.swipeEvent.count({
+          where: { toUserId: userId, action: 'LIKE', sessionId: { in: actSessIds } },
+        });
         return {
           id: a.id,
           title: a.title,
           type: a.type,
           enrollmentCount: count,
           revenue: Number(revenue._sum.leaderAmount ?? 0),
+          compatibility,
         };
       }),
     );
@@ -198,7 +210,9 @@ export class UsersService {
         last30days: revenueLast30,
       },
       social: {
-        matchesInSessions,
+        totalLikes,
+        likesFromParticipants,
+        likesFromProspects,
       },
       topActivities,
     };

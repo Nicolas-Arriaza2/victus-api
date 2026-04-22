@@ -304,6 +304,79 @@ export class AdminController {
     return { ok: true, message: 'Forum tables created' };
   }
 
+  @Post('seed-social')
+  async seedSocial(@Headers('x-admin-secret') secret: string) {
+    if (secret !== 'biktus-demo-2026') throw new UnauthorizedException('Invalid secret');
+
+    const lider = await this.prisma.user.findUnique({ where: { email: 'lider@biktus.local' } });
+    if (!lider) return { ok: false, error: 'Leader not found' };
+
+    const activities = await this.prisma.activity.findMany({
+      where: { createdById: lider.id },
+      include: { sessions: { select: { id: true } } },
+    });
+
+    const yogaAct     = activities.find((a) => a.title.includes('Yoga'));
+    const teatroAct   = activities.find((a) => a.title.includes('Teatro') || a.title.includes('Impro'));
+    const trekkingAct = activities.find((a) => a.title.includes('Trekking'));
+
+    const yogaSessionId     = yogaAct?.sessions[0]?.id     ?? null;
+    const teatroSessionId   = teatroAct?.sessions[0]?.id   ?? null;
+    const trekkingSessionId = trekkingAct?.sessions[0]?.id ?? null;
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        email: {
+          in: ['ana@biktus.local', 'diego@biktus.local', 'bruno@biktus.local',
+               'fernanda@biktus.local', 'camila@biktus.local', 'rodrigo@biktus.local',
+               'sofia@biktus.local'],
+        },
+      },
+      select: { id: true, email: true },
+    });
+    const byEmail = Object.fromEntries(users.map((u) => [u.email, u.id]));
+
+    // Remove previous swipes toward leader to keep data clean
+    await this.prisma.swipeEvent.deleteMany({ where: { toUserId: lider.id } });
+
+    const swipeDefs: Array<{ email: string; sessionId: string | null }> = [
+      // Enrolled users — swipe with session context (contributes to activity compatibility)
+      { email: 'ana@biktus.local',      sessionId: yogaSessionId },
+      { email: 'diego@biktus.local',    sessionId: yogaSessionId },
+      { email: 'bruno@biktus.local',    sessionId: teatroSessionId },
+      { email: 'fernanda@biktus.local', sessionId: trekkingSessionId },
+      // Non-enrolled prospects — no session (likesFromProspects)
+      { email: 'camila@biktus.local',   sessionId: null },
+      { email: 'rodrigo@biktus.local',  sessionId: null },
+      { email: 'sofia@biktus.local',    sessionId: null },
+    ];
+
+    let created = 0;
+    for (const { email, sessionId } of swipeDefs) {
+      const byUserId = byEmail[email];
+      if (!byUserId) continue;
+      await this.prisma.swipeEvent.create({
+        data: {
+          byUserId,
+          toUserId: lider.id,
+          action: 'LIKE',
+          ...(sessionId ? { sessionId } : {}),
+        },
+      });
+      created++;
+    }
+
+    return { ok: true, swipesCreated: created, breakdown: {
+      likesFromParticipants: 4,
+      likesFromProspects: 3,
+      compatibilityByActivity: {
+        yoga: yogaSessionId ? 2 : 0,
+        teatro: teatroSessionId ? 1 : 0,
+        trekking: trekkingSessionId ? 1 : 0,
+      },
+    }};
+  }
+
   @Post('seed-forum')
   async seedForum(@Headers('x-admin-secret') secret: string) {
     if (secret !== 'biktus-demo-2026') {

@@ -147,6 +147,163 @@ export class AdminController {
     return { ok: true, results };
   }
 
+  @Post('seed-stats')
+  async seedStats(@Headers('x-admin-secret') secret: string) {
+    if (secret !== 'biktus-demo-2026') throw new UnauthorizedException('Invalid secret');
+
+    const lider = await this.prisma.user.findUnique({ where: { email: 'lider@biktus.local' } });
+    if (!lider) return { ok: false, error: 'Leader not found' };
+
+    const activities = await this.prisma.activity.findMany({
+      where: { createdById: lider.id },
+      include: { sessions: { select: { id: true } } },
+    });
+    if (!activities.length) return { ok: false, error: 'No activities found' };
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        email: { in: ['ana@biktus.local','bruno@biktus.local','diego@biktus.local',
+                       'fernanda@biktus.local','gabriel@biktus.local','isabela@biktus.local'] },
+      },
+      select: { id: true, email: true },
+    });
+    const byEmail = Object.fromEntries(users.map((u) => [u.email, u.id]));
+
+    let enrollmentsAdded = 0;
+    let paymentsAdded    = 0;
+    let payCounter       = 1000;
+
+    for (const activity of activities) {
+      for (const session of activity.sessions) {
+        for (const uid of Object.values(byEmail)) {
+          // skip if already enrolled
+          const exists = await this.prisma.activityEnrollment.findUnique({
+            where: { sessionId_userId: { sessionId: session.id, userId: uid as string } },
+          });
+          if (exists) continue;
+
+          const enrollment = await this.prisma.activityEnrollment.create({
+            data: {
+              sessionId: session.id,
+              userId: uid as string,
+              status: 'confirmed',
+              paymentStatus: 'paid',
+            },
+          });
+          enrollmentsAdded++;
+
+          const amount = [10000, 12000, 15000, 18000, 20000, 25000][payCounter % 6];
+          payCounter++;
+          const mpId = `demo-stats-pay-${payCounter}`;
+
+          const existing = await this.prisma.payment.findUnique({ where: { mpPaymentId: mpId } });
+          if (!existing) {
+            const transferred = payCounter % 3 !== 0;
+            await this.prisma.payment.create({
+              data: {
+                userId: uid as string,
+                activityId: activity.id,
+                enrollmentId: enrollment.id,
+                leaderId: lider.id,
+                totalAmount: amount,
+                platformFee: 0,
+                leaderAmount: amount,
+                mpPaymentId: mpId,
+                mpStatus: 'approved',
+                status: 'completed',
+                transferStatus: transferred ? 'transferred' : 'pending',
+                paidAt: new Date(Date.now() - Math.random() * 30 * 86400000),
+                ...(transferred ? { transferredAt: new Date(Date.now() - Math.random() * 15 * 86400000) } : {}),
+              },
+            });
+            paymentsAdded++;
+          }
+        }
+      }
+    }
+
+    return { ok: true, enrollmentsAdded, paymentsAdded };
+  }
+
+  @Post('migrate-forum')
+  async migrateForum(@Headers('x-admin-secret') secret: string) {
+    if (secret !== 'biktus-demo-2026') {
+      throw new UnauthorizedException('Invalid secret');
+    }
+
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ForumQuestion" (
+        "id" TEXT NOT NULL,
+        "activityId" TEXT NOT NULL,
+        "authorId" TEXT NOT NULL,
+        "body" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ForumQuestion_pkey" PRIMARY KEY ("id")
+      )
+    `);
+
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ForumAnswer" (
+        "id" TEXT NOT NULL,
+        "questionId" TEXT NOT NULL,
+        "authorId" TEXT NOT NULL,
+        "body" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ForumAnswer_pkey" PRIMARY KEY ("id")
+      )
+    `);
+
+    await this.prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "ForumQuestion_activityId_idx" ON "ForumQuestion"("activityId")
+    `);
+    await this.prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "ForumAnswer_questionId_idx" ON "ForumAnswer"("questionId")
+    `);
+
+    // Foreign keys (ignore errors if already exist)
+    try {
+      await this.prisma.$executeRawUnsafe(`
+        ALTER TABLE "ForumQuestion"
+          ADD CONSTRAINT "ForumQuestion_activityId_fkey"
+          FOREIGN KEY ("activityId") REFERENCES "Activity"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+    } catch {}
+    try {
+      await this.prisma.$executeRawUnsafe(`
+        ALTER TABLE "ForumQuestion"
+          ADD CONSTRAINT "ForumQuestion_authorId_fkey"
+          FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+    } catch {}
+    try {
+      await this.prisma.$executeRawUnsafe(`
+        ALTER TABLE "ForumAnswer"
+          ADD CONSTRAINT "ForumAnswer_questionId_fkey"
+          FOREIGN KEY ("questionId") REFERENCES "ForumQuestion"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+    } catch {}
+    try {
+      await this.prisma.$executeRawUnsafe(`
+        ALTER TABLE "ForumAnswer"
+          ADD CONSTRAINT "ForumAnswer_authorId_fkey"
+          FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+    } catch {}
+
+    // Mark migration as applied in Prisma's migration table
+    try {
+      await this.prisma.$executeRawUnsafe(`
+        INSERT INTO "_prisma_migrations" ("id","checksum","finished_at","migration_name","logs","rolled_back_at","started_at","applied_steps_count")
+        VALUES (gen_random_uuid(),'manual',NOW(),'20260422000000_add_forum',NULL,NULL,NOW(),1)
+        ON CONFLICT DO NOTHING
+      `);
+    } catch {}
+
+    return { ok: true, message: 'Forum tables created' };
+  }
+
   @Post('seed-forum')
   async seedForum(@Headers('x-admin-secret') secret: string) {
     if (secret !== 'biktus-demo-2026') {

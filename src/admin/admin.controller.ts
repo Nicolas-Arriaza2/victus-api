@@ -4,6 +4,7 @@ import {
   Headers,
   UnauthorizedException,
 } from '@nestjs/common';
+import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 
 const DEMO_USERS: Array<{
@@ -323,6 +324,26 @@ export class AdminController {
     const yogaSessionId     = yogaAct?.sessions[0]?.id     ?? null;
     const teatroSessionId   = teatroAct?.sessions[0]?.id   ?? null;
     const trekkingSessionId = trekkingAct?.sessions[0]?.id ?? null;
+
+    // Prospect users: create them if they don't exist (non-enrolled, no sessions)
+    const prospectDefs = [
+      { email: 'camila@biktus.local',  firstName: 'Camila',  lastName: 'Vega',    gender: 'female' as const },
+      { email: 'rodrigo@biktus.local', firstName: 'Rodrigo', lastName: 'Peña',    gender: 'male'   as const },
+      { email: 'sofia@biktus.local',   firstName: 'Sofía',   lastName: 'Morales', gender: 'female' as const },
+    ];
+    const passwordHash = await argon2.hash('password123');
+    for (const p of prospectDefs) {
+      const exists = await this.prisma.user.findUnique({ where: { email: p.email } });
+      if (!exists) {
+        await this.prisma.user.create({
+          data: {
+            email: p.email,
+            passwordHash,
+            profile: { create: { firstName: p.firstName, lastName: p.lastName, gender: p.gender } },
+          },
+        });
+      }
+    }
 
     const users = await this.prisma.user.findMany({
       where: {

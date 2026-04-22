@@ -107,7 +107,6 @@ export class UsersService {
       where: { createdById: userId },
       include: {
         sessions: { select: { id: true, startsAt: true } },
-        enrollments: false,
       },
     });
 

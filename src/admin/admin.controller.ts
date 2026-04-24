@@ -559,4 +559,195 @@ export class AdminController {
 
     return { ok: true, questionsCreated: total };
   }
+
+  @Post('seed-cross')
+  async seedCross(@Headers('x-admin-secret') secret: string) {
+    if (secret !== 'biktus-demo-2026') throw new UnauthorizedException('Invalid secret');
+
+    const hash = await argon2.hash('password123');
+    const log: string[] = [];
+
+    // ── 1. Set lider@biktus.local interests ───────────────────────────────
+    const lider = await this.prisma.user.findUnique({ where: { email: 'lider@biktus.local' } });
+    if (!lider) return { ok: false, error: 'Leader not found' };
+
+    const LIDER_INTEREST_SLUGS = ['yoga', 'meditacion', 'senderismo', 'trekking', 'fotografia'];
+    const liderInterests = await this.prisma.interest.findMany({
+      where: { slug: { in: LIDER_INTEREST_SLUGS } },
+    });
+    await this.prisma.userInterest.deleteMany({ where: { userId: lider.id } });
+    await this.prisma.userInterest.createMany({
+      data: liderInterests.map((i) => ({ userId: lider.id, interestId: i.id })),
+      skipDuplicates: true,
+    });
+    log.push(`lider interests set: ${liderInterests.map((i) => i.slug).join(', ')}`);
+
+    // ── 2. Create second leader: Carlos ───────────────────────────────────
+    let carlos = await this.prisma.user.findUnique({ where: { email: 'carlos@biktus.local' } });
+    if (!carlos) {
+      carlos = await this.prisma.user.create({
+        data: {
+          email: 'carlos@biktus.local',
+          passwordHash: hash,
+          roles: ['COMMUNITY_LEADER'],
+          profile: { create: { firstName: 'Carlos', lastName: 'Mendoza', gender: 'male' } },
+        },
+      });
+      log.push('carlos@biktus.local created');
+    } else {
+      log.push('carlos@biktus.local already exists');
+    }
+
+    // Set Carlos interests: salsa, teatro, comedia, musica
+    const CARLOS_INTEREST_SLUGS = ['salsa', 'teatro', 'comedia', 'musica'];
+    const carlosInterests = await this.prisma.interest.findMany({
+      where: { slug: { in: CARLOS_INTEREST_SLUGS } },
+    });
+    await this.prisma.userInterest.deleteMany({ where: { userId: carlos.id } });
+    await this.prisma.userInterest.createMany({
+      data: carlosInterests.map((i) => ({ userId: carlos.id, interestId: i.id })),
+      skipDuplicates: true,
+    });
+
+    // Carlos photo
+    const carlosPhoto = await this.prisma.userPhoto.findFirst({ where: { userId: carlos.id } });
+    if (!carlosPhoto) {
+      await this.prisma.userPhoto.create({
+        data: { userId: carlos.id, url: 'https://randomuser.me/api/portraits/men/35.jpg', position: 0, format: 'jpg' },
+      });
+      await this.prisma.userProfile.update({
+        where: { userId: carlos.id },
+        data: { avatarUrl: 'https://randomuser.me/api/portraits/men/35.jpg' },
+      });
+    }
+
+    // ── 3. Activity A: NO compatibility (salsa, bachata, reggaeton) ─────────
+    const now = new Date();
+    let actSalsa = await this.prisma.activity.findFirst({
+      where: { createdById: carlos.id, title: { contains: 'Salsa' } },
+    });
+    if (!actSalsa) {
+      const salsaInterests = await this.prisma.interest.findMany({
+        where: { slug: { in: ['salsa', 'bachata', 'reggaeton'] } },
+      });
+      actSalsa = await this.prisma.activity.create({
+        data: {
+          slug: `salsa-bachata-${Date.now()}`,
+          title: 'Taller de Salsa y Bachata',
+          type: 'dance',
+          description: 'Aprende a bailar salsa y bachata desde cero. Clases dinámicas en pareja, rotamos para que todos practiquen.',
+          createdById: carlos.id,
+          interests: { create: salsaInterests.map((i) => ({ interestId: i.id })) },
+          sessions: {
+            create: [
+              {
+                startsAt: new Date(now.getTime() + 5 * 86_400_000),
+                endsAt:   new Date(now.getTime() + 5 * 86_400_000 + 7_200_000),
+                capacity: 20,
+                priceCents: 12000,
+                locationName: 'Centro de Danza Vivace, Providencia',
+              },
+              {
+                startsAt: new Date(now.getTime() + 12 * 86_400_000),
+                endsAt:   new Date(now.getTime() + 12 * 86_400_000 + 7_200_000),
+                capacity: 20,
+                priceCents: 12000,
+                locationName: 'Centro de Danza Vivace, Providencia',
+              },
+            ],
+          },
+        },
+      });
+      log.push('activity Salsa created');
+    }
+
+    // ── 4. Activity B: HIGH compatibility (fotografia, arte, viajes-grupales) ─
+    let actFoto = await this.prisma.activity.findFirst({
+      where: { createdById: carlos.id, title: { contains: 'Fotografía' } },
+    });
+    if (!actFoto) {
+      const fotoInterests = await this.prisma.interest.findMany({
+        where: { slug: { in: ['fotografia', 'arte', 'viajes-grupales'] } },
+      });
+      actFoto = await this.prisma.activity.create({
+        data: {
+          slug: `fotografia-urbana-${Date.now()}`,
+          title: 'Fotografía Urbana Weekend',
+          type: 'art',
+          description: 'Salida fotográfica por el centro histórico. Aprende composición, luz natural y edición básica con Lightroom Mobile.',
+          createdById: carlos.id,
+          interests: { create: fotoInterests.map((i) => ({ interestId: i.id })) },
+          sessions: {
+            create: [
+              {
+                startsAt: new Date(now.getTime() + 8 * 86_400_000),
+                endsAt:   new Date(now.getTime() + 8 * 86_400_000 + 14_400_000),
+                capacity: 12,
+                priceCents: 15000,
+                locationName: 'Plaza de Armas, Santiago',
+              },
+            ],
+          },
+        },
+      });
+      log.push('activity Fotografía Urbana created');
+    }
+
+    // ── 5. Enroll lider in the Fotografía session (already inscrito demo) ────
+    const fotoSession = await this.prisma.activitySession.findFirst({
+      where: { activityId: actFoto.id },
+      orderBy: { startsAt: 'asc' },
+    });
+    if (fotoSession) {
+      await this.prisma.activityEnrollment.upsert({
+        where: { sessionId_userId: { sessionId: fotoSession.id, userId: lider.id } },
+        update: {},
+        create: { sessionId: fotoSession.id, userId: lider.id, status: 'confirmed', paymentStatus: 'paid' },
+      });
+      log.push('lider enrolled in Fotografía session');
+    }
+
+    // ── 6. Create a session TOMORROW in lider's yoga activity, with pending payments ─
+    const yoga = await this.prisma.activity.findFirst({
+      where: { createdById: lider.id, title: { contains: 'Yoga' } },
+    });
+    if (yoga) {
+      // tomorrow at 10 AM
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 0, 0);
+      const tomorrowEnd = new Date(tomorrow.getTime() + 5_400_000); // +90 min
+
+      let paySession = await this.prisma.activitySession.findFirst({
+        where: { activityId: yoga.id, startsAt: { gte: tomorrow, lt: new Date(tomorrow.getTime() + 86_400_000) } },
+      });
+      if (!paySession) {
+        paySession = await this.prisma.activitySession.create({
+          data: {
+            activityId: yoga.id,
+            startsAt: tomorrow,
+            endsAt: tomorrowEnd,
+            capacity: 15,
+            priceCents: 8000,
+            locationName: 'Estudio Yoga Sol, Las Condes',
+          },
+        });
+        log.push('session tomorrow (yoga) created');
+      }
+
+      // Enroll 3 users with pending_payment
+      const pendingUsers = await this.prisma.user.findMany({
+        where: { email: { in: ['ana@biktus.local', 'diego@biktus.local', 'gabriel@biktus.local'] } },
+        select: { id: true, email: true },
+      });
+      for (const u of pendingUsers) {
+        await this.prisma.activityEnrollment.upsert({
+          where: { sessionId_userId: { sessionId: paySession.id, userId: u.id } },
+          update: { paymentStatus: 'pending_payment', status: 'confirmed' },
+          create: { sessionId: paySession.id, userId: u.id, status: 'confirmed', paymentStatus: 'pending_payment' },
+        });
+      }
+      log.push(`${pendingUsers.length} enrollments with pending_payment for tomorrow session`);
+    }
+
+    return { ok: true, log };
+  }
 }

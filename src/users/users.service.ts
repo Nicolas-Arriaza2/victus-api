@@ -97,6 +97,29 @@ export class UsersService {
     return info;
   }
 
+  async deleteMyAccount(userId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // Relations without cascade — must delete before the user
+      await tx.swipeEvent.deleteMany({
+        where: { OR: [{ byUserId: userId }, { toUserId: userId }] },
+      });
+      await tx.match.deleteMany({
+        where: { OR: [{ userAId: userId }, { userBId: userId }] },
+      });
+      await tx.subscriptionBilling.deleteMany({
+        where: { OR: [{ leaderId: userId }, { subscription: { userId } }] },
+      });
+      await tx.payment.deleteMany({
+        where: { OR: [{ userId }, { leaderId: userId }] },
+      });
+      // Activities cascade-delete sessions → enrollments, forum Q&A, interests
+      await tx.activity.deleteMany({ where: { createdById: userId } });
+      // Deleting the user cascades: profile, interests, photos, notifications,
+      // bankInfo, enrollments, subscriptions, forumQuestions, forumAnswers
+      await tx.user.delete({ where: { id: userId } });
+    });
+  }
+
   async getLeaderStats(userId: string) {
     const now = new Date();
     const last7  = new Date(now.getTime() - 7  * 24 * 3600 * 1000);

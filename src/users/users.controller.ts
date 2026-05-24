@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Put,
@@ -65,5 +68,11 @@ export class UsersController {
   @Put('me/interests')
   setMyInterests(@Req() req: any, @Body() dto: UpdateInterestsDto) {
     return this.service.setInterests(req.user.sub, dto.interestIds);
+  }
+
+  @Delete('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteMyAccount(@Req() req: any) {
+    return this.service.deleteMyAccount(req.user.sub);
   }
 }

@@ -750,4 +750,15 @@ export class AdminController {
 
     return { ok: true, log };
   }
+
+  @Post('reset-demo-pass')
+  async resetDemoPass(@Headers('x-admin-secret') secret: string) {
+    if (secret !== 'biktus-demo-2026') throw new UnauthorizedException();
+    const hash = await argon2.hash('BiktusReview2026');
+    await this.prisma.user.update({
+      where: { email: 'lider@biktus.local' },
+      data: { passwordHash: hash },
+    });
+    return { ok: true, email: 'lider@biktus.local' };
+  }
 }

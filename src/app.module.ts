@@ -18,6 +18,8 @@ import { PaymentsModule } from './payments/payments.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { AdminModule } from './admin/admin.module';
 import { ForumModule } from './forum/forum.module';
+import { ReportsModule } from './reports/reports.module';
+import { BlocksModule } from './blocks/blocks.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { ForumModule } from './forum/forum.module';
     SubscriptionsModule,
     AdminModule,
     ForumModule,
+    ReportsModule,
+    BlocksModule,
   ],
 })
 export class AppModule {}

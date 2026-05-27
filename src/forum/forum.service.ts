@@ -1,9 +1,21 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+
+const BLOCKED_WORDS = [
+  'mierda','puta','puto','coño','culo','pendejo','cabron','cabrón',
+  'marica','maricón','hijo de puta','hdp','concha','verga','polla',
+  'joder','follar','cagar','idiota','imbécil','estupido','estúpido',
+];
+
+function containsBlockedContent(text: string): boolean {
+  const lower = text.toLowerCase();
+  return BLOCKED_WORDS.some((w) => lower.includes(w));
+}
 
 const AUTHOR_SELECT = {
   id: true,
@@ -30,6 +42,9 @@ export class ForumService {
   }
 
   async createQuestion(activityId: string, authorId: string, body: string) {
+    if (containsBlockedContent(body))
+      throw new BadRequestException('El mensaje contiene contenido inapropiado.');
+
     const activity = await this.prisma.activity.findUnique({ where: { id: activityId } });
     if (!activity) throw new NotFoundException('Activity not found');
 
@@ -43,6 +58,9 @@ export class ForumService {
   }
 
   async createAnswer(questionId: string, authorId: string, body: string) {
+    if (containsBlockedContent(body))
+      throw new BadRequestException('El mensaje contiene contenido inapropiado.');
+
     const question = await this.prisma.forumQuestion.findUnique({ where: { id: questionId } });
     if (!question) throw new NotFoundException('Question not found');
 

@@ -123,7 +123,10 @@ enum EnrollmentPaymentStatus {
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
-  passwordHash String
+  passwordHash String?
+  authProvider String?
+  googleId     String?    @unique
+  appleId      String?    @unique
   phone        String?    @unique
   username     String?    @unique
   roles        UserRole[] @default([USER])

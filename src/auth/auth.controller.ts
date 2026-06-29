@@ -4,6 +4,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { FirebaseAuthDto } from './dto/firebase-auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -17,6 +18,11 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.service.login(dto);
+  }
+
+  @Post('firebase')
+  loginWithFirebase(@Body() dto: FirebaseAuthDto) {
+    return this.service.loginWithFirebase(dto);
   }
 
   @Post('forgot-password')
